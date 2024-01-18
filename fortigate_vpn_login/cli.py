@@ -7,14 +7,15 @@
 """
 import logging
 import os
+import subprocess
 import sys
 import webbrowser
-import subprocess
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
+
+import fortigate_vpn_login.webserver as webserver
 from fortigate_vpn_login import __version__, __description__, logger
 from fortigate_vpn_login import utils, config
 from fortigate_vpn_login.fortigate import Fortigate
-import fortigate_vpn_login.webserver as webserver
 
 
 def main() -> int:
@@ -68,25 +69,6 @@ def main() -> int:
         dest='FORTI_URL'
     )
 
-    # windows don't have these options supported
-    if not utils.is_windows():
-        parser.add_argument(
-            '-F',
-            '--foreground',
-            help='Run VPN in foreground.',
-            dest="FOREGROUND",
-            action='store_true'
-        )
-
-        parser.add_argument(
-            '-B',
-            '--background',
-            help='Run VPN in background (default).',
-            dest="BACKGROUND",
-            action='store_true',
-            default=True
-        )
-
     # parse the arguments, show in the screen if needed, etc
     parser = parser.parse_args()
 
@@ -103,9 +85,6 @@ def main() -> int:
     if parser.QUIET_MODE:
         logging.disable(logging.CRITICAL)
 
-    if parser.FOREGROUND:
-        parser.BACKGROUND = False
-
     # load configuration
     options = config.Config()
 
@@ -114,14 +93,6 @@ def main() -> int:
         options.configure()
         options.write()
         return 0
-
-    openconnect_path = utils.find_openconnect()
-
-    # openconnect compatability check
-    if not utils.check_openconnect_version(openconnect_path):
-        print("ERROR: Your openconnect version isn't compatible with this program. "
-              "Make sure you have the latest version, which supports the \"fortinet\" protocol.")
-        return 1
 
     # server url
     if not parser.FORTI_URL:
@@ -150,53 +121,7 @@ def main() -> int:
 
     cookie_svpn = fortigate.get_cookie(auth_id)
 
-    openconnect_arguments = [
-        "--protocol=fortinet",
-        f"--server={fortigate_vpn_url}",
-        f"--useragent=fortigate-vpn-login-{__version__}:{os.uname().version}",
-        "--no-dtls",
-        "--non-inter",
-        "--disable-ipv6",
-        f"--cookie=SVPNCOOKIE={cookie_svpn}",
-    ]
-
-    if parser.QUIET_MODE:
-        openconnect_arguments.append("--quiet")
-
-    if parser.DEBUG_MODE:
-        openconnect_arguments.append("--verbose")
-
-    if parser.BACKGROUND:
-        openconnect_arguments.append("--quiet")
-        openconnect_arguments.append("--background")
-
-    command_line = []
-    if utils.is_windows():
-        workdir = openconnect_path.parent
-        command_line = [
-            "powershell",
-            "-Command",
-            f"Start-Process '{str(openconnect_path)}' "
-            f"-ArgumentList {','.join(openconnect_arguments)} "
-            f"-Verb runAs -WorkingDirectory {workdir}",
-        ]
-    else:
-        if not os.getuid() == 0:
-            command_line.append("sudo")
-            command_line = command_line + [str(openconnect_path)] + openconnect_arguments
-
-    env = os.environ.copy()
-    env['LC_ALL'] = 'C'
-
-    try:
-        if not parser.BACKGROUND:
-            subprocess.run(command_line, env=env)
-        else:
-            subprocess.run(command_line, env=env,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except KeyboardInterrupt:
-        logger.debug("User interrupted process.")
-        print("CTRL+C/SIGTERM detected. Exiting.")
+    print(cookie_svpn)
 
     return 0
 

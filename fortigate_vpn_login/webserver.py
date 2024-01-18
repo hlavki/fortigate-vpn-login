@@ -57,7 +57,7 @@ def return_token() -> str:
     Blocks the process while waiting for the token in the global queue.
     """
     global queue
-    print("Waiting for the token...")
+    logger.info("Waiting for the token...")
     token = queue.get(block=True)
     logger.debug(f"Got token: {token}")
     return (token)
